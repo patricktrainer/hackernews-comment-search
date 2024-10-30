@@ -9,23 +9,44 @@ ARRAY_TYPE = DuckDBPyType(list[float])  # type: ignore
 PickleCache = Dict[Tuple[str, str], List[float]]
 
 
+class EmbeddingKey:
+    def __init__(self, text: str, model: str):
+        self._text = text
+        self._model = model
+
+    @property
+    def text(self):
+        return self._text
+
+    @property
+    def model(self):
+        return self._model
+
+    def __eq__(self, other):
+        if isinstance(other, EmbeddingKey):
+            return self.text == other.text and self.model == other.model
+        return False
+
+    def __hash__(self):
+        return hash((self.text, self.model))
+
+
 def write_embedding_to_table(
-    con: DuckDBPyConnection, text: str, model: str, embedding: List[float]
+    con: DuckDBPyConnection, key: EmbeddingKey, embedding: List[float]
 ) -> DuckDBPyConnection:
     """
     Writes the given embedding to the `embeddings` table in the database.
 
     Args:
         con (DuckDBPyConnection): The connection to the DuckDB database.
-        text (str): The text associated with the embedding.
-        model (str): The model used to generate the embedding.
+        key (EmbeddingKey): The key associated with the embedding.
         embedding (List[float]): The embedding vector.
 
     Returns:
         DuckDBPyConnection: The connection to the DuckDB database after the insertion.
     """
     create_table_if_not_exists(con)
-    con.execute("INSERT INTO embeddings VALUES (?, ?, ?)", [text, model, embedding])
+    con.execute("INSERT INTO embeddings VALUES (?, ?, ?)", [key.text, key.model, embedding])
     return con
 
 
@@ -44,13 +65,13 @@ def create_table_if_not_exists(con) -> None:
     )
 
 
-def is_key_in_table(con: DuckDBPyConnection, key: Tuple[str, str]) -> bool:
+def is_key_in_table(con: DuckDBPyConnection, key: EmbeddingKey) -> bool:
     """
     Check if a key exists in the embeddings table.
 
     Args:
         con (DuckDBPyConnection): The connection to the DuckDB database.
-        key (Tuple[str, str]): The key to check in the format (text, model).
+        key (EmbeddingKey): The key to check.
 
     Returns:
         bool: True if the key exists in the table, False otherwise.
@@ -58,7 +79,7 @@ def is_key_in_table(con: DuckDBPyConnection, key: Tuple[str, str]) -> bool:
     create_table_if_not_exists(con)
     result = con.execute(
         "SELECT EXISTS(SELECT * FROM embeddings WHERE text=? AND model=?)",
-        [key[0], key[1]],
+        [key.text, key.model],
     ).fetchone()
     if result:
         return result[0]
@@ -66,17 +87,17 @@ def is_key_in_table(con: DuckDBPyConnection, key: Tuple[str, str]) -> bool:
 
 
 def list_keys_in_table(
-    con: DuckDBPyConnection, keys: List[Tuple[str, str]]
-) -> list[tuple[str, str]]:
+    con: DuckDBPyConnection, keys: List[EmbeddingKey]
+) -> list[EmbeddingKey]:
     """
     Returns a list of keys that exist in the specified table.
 
     Args:
         con (DuckDBPyConnection): The connection to the DuckDB database.
-        keys (List[Tuple[str, str]]): The keys to check in the table.
+        keys (List[EmbeddingKey]): The keys to check in the table.
 
     Returns:
-        List[Tuple[str, str]]: A list of keys that exist in the table.
+        List[EmbeddingKey]: A list of keys that exist in the table.
     """
     keys_in_table = []
 
@@ -117,7 +138,8 @@ def write_pickle_cache_to_duckdb(con: DuckDBPyConnection, pickle_path: str) -> N
     cache = load_pickle_cache(pickle_path)
     create_table_if_not_exists(con)
     for key, value in cache.items():
-        write_embedding_to_table(con, key[0], key[1], value)
+        embedding_key = EmbeddingKey(key[0], key[1])
+        write_embedding_to_table(con, embedding_key, value)
 
 
 # Function to save the cache to a file
@@ -136,24 +158,23 @@ def save_pickle_cache(cache: PickleCache, cache_path: str) -> None:
         pickle.dump(cache, file)
 
 
-def get_embedding_from_table(con: DuckDBPyConnection, text: str, model: str) -> List[float]:
+def get_embedding_from_table(con: DuckDBPyConnection, key: EmbeddingKey) -> List[float]:
     """
-    Retrieves the embedding from the 'embeddings' table based on the given text and model.
+    Retrieves the embedding from the 'embeddings' table based on the given key.
 
     Args:
         con (DuckDBPyConnection): The connection to the DuckDB database.
-        text (str): The text to search for in the 'text' column of the table.
-        model (str): The model to search for in the 'model' column of the table.
+        key (EmbeddingKey): The key to search for in the table.
 
     Returns:
-        List[float]: The embedding associated with the given text and model.
+        List[float]: The embedding associated with the given key.
 
     Raises:
-        ValueError: If the embedding for the given text and model is not found in the table.
+        ValueError: If the embedding for the given key is not found in the table.
     """
     result = con.execute(
-        "SELECT embedding FROM embeddings WHERE text=? AND model=?", [text, model]
+        "SELECT embedding FROM embeddings WHERE text=? AND model=?", [key.text, key.model]
     ).fetchone()
     if result:
         return result[0]
-    raise ValueError(f"Embedding for {text} with model {model} not found in table")
+    raise ValueError(f"Embedding for {key.text} with model {key.model} not found in table")

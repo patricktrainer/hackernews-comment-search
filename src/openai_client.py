@@ -13,6 +13,8 @@ def get_openai_client() -> OpenAI:
     :return: An instance of the OpenAI client.
     """
     key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise ValueError("OpenAI API key not found in environment variables.")
     client = OpenAI(api_key=key)
     return client
 
@@ -34,9 +36,13 @@ def create_embedding(
     try:
         client = get_openai_client()
     except Exception as e:
-        print(e)
+        print(f"Error initializing OpenAI client: {e}")
         return []
 
     text = text.replace("\n", " ")
-    response = client.embeddings.create(input=[text], model=model, **kwargs)
-    return response.data[0].embedding
+    try:
+        response = client.embeddings.create(input=[text], model=model, **kwargs)
+        return response.data[0].embedding
+    except Exception as e:
+        print(f"Error creating embedding: {e}")
+        return []
