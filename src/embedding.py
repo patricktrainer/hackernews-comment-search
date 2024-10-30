@@ -2,7 +2,7 @@ from typing import List
 import src.operations as operations
 import src.openai_client as openai_client
 from .connection import DuckDBPyConnection
-
+from .operations import EmbeddingKey
 
 
 # Function to get embeddings, using the cache
@@ -24,7 +24,7 @@ def pickle_embeddings(
     pickle_cache = operations.load_pickle_cache(pickle_path)
 
     for text in texts:
-        key = (text, model)
+        key = EmbeddingKey(text, model)
         if key not in pickle_cache:
             pickle_cache[key] = openai_client.create_embedding(text, model=model)
         embeddings.append(pickle_cache[key])
@@ -49,12 +49,13 @@ def duckdb_embeddings(
     """
     embeddings = []
     for text in texts:
+        key = EmbeddingKey(text, model)
         # check to see if embedding is in duckdb table
-        result = operations.is_key_in_table(con, (text, model))
+        result = operations.is_key_in_table(con, key)
         if result:
             print("Embedding found in table")
             # if so, get it
-            embedding = operations.get_embedding_from_table(con, text, model)
+            embedding = operations.get_embedding_from_table(con, key)
             embeddings.append(embedding)
         else:
             print("Embedding not found in table")
@@ -62,7 +63,7 @@ def duckdb_embeddings(
             # if not, create it
             embedding = openai_client.create_embedding(text, model)
             # and write it to the table
-            operations.write_embedding_to_table(con, text, model, embedding)
+            operations.write_embedding_to_table(con, key, embedding)
             embeddings.append(embedding)        
     return embeddings
 

@@ -1,0 +1,14 @@
+database:
+  name: hn_embeddings
+
+model:
+  name: text-embedding-ada-002
+
+paths:
+  pickle_cache: data/embeddings_cache.pkl
+
+openai:
+  api_key: YOUR_OPENAI_API_KEY
+
+rag_pipeline:
+  top_k: 10

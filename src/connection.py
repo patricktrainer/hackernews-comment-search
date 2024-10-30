@@ -11,11 +11,14 @@ def open_connection(dbname=None) -> duckdb.DuckDBPyConnection:
     Returns:
         `duckdb.DuckDBPyConnection`: A connection object to the local database.
     """
-    if dbname:
-        return duckdb.connect(f"{dbname}.db")
-    else:
-        return duckdb.connect(":memory:")
-
+    try:
+        if dbname:
+            return duckdb.connect(f"{dbname}.db")
+        else:
+            return duckdb.connect(":memory:")
+    except Exception as e:
+        print(f"Error connecting to the database: {e}")
+        raise
 
 def load_extension(
     con: duckdb.DuckDBPyConnection, extension: str
@@ -36,7 +39,7 @@ def load_extension(
     try:
         con.install_extension(extension)
         con.load_extension(extension)
-    except:
-        print(f"Could not load extension {extension}")
-        pass
+    except Exception as e:
+        print(f"Could not load extension {extension}: {e}")
+        raise
     return con
